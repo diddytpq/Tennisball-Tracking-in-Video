@@ -568,6 +568,8 @@ def clear_tennis_court_img():
     padding_x = int((1500 - tennis_court_img.shape[1]) /3)
 
     WHITE = [255,255,255]
-    tennis_court_img= cv2.copyMakeBorder(tennis_court_img.copy(),padding_y,padding_y,padding_x,padding_x,cv2.BORDER_CONSTANT,value=WHITE)
+    tennis_court_img= 	cv2.copyMakeBorder(tennis_court_img.copy(),padding_y,padding_y,padding_x,padding_x,cv2.BORDER_CONSTANT,value=WHITE)
+
 
     return tennis_court_img
+

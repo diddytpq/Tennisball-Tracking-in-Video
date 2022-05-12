@@ -8,7 +8,8 @@ FILE = Path(__file__).absolute()
 sys.path.append(FILE.parents[0].as_posix())  # add code to path
 
 path = str(FILE.parents[0])
-sys.path.insert(0, './yolov5')
+sys.path.append(path + '/lib')  # add code to path
+
 
 import numpy as np
 import time
@@ -42,7 +43,7 @@ parser.add_argument('--debug', type = bool, default=False, help = 'set debug mod
 args = parser.parse_args()
 
 device = 0
-weights = path + "/yolov5/weights/yolov5m6.pt"
+weights = path + "/lib/yolov5/weights/yolov5m6.pt"
 imgsz = 640
 conf_thres = 0.25
 iou_thres = 0.45
@@ -83,6 +84,7 @@ def person_tracking(model, img, img_ori, device):
         if img_in.ndimension() == 3:
             img_in = img_in.unsqueeze(0)
         
+        print(img_in.size())
 
         pred = model(img_in, augment=False, visualize=False)
 
@@ -172,213 +174,33 @@ def main(input_video):
 
         print("frame_count : ",frame_count)
 
-        ball_box_left = []
-        ball_box_right = []
-
-        ball_cen_left = []
-        ball_cen_right = []
-
-        ball_pos = []
-
         ret, frame = cap_main.read()
 
-        frame = cv2.resize(frame, dsize=(720, 405 * 2), interpolation=cv2.INTER_LINEAR)
+        frame = cv2.resize(frame, dsize=(640, 640), interpolation=cv2.INTER_LINEAR)
 
-        frame_left = frame[0 : int(frame.shape[0]/2), : , : ]
-        frame_right = frame[int(frame.shape[0]/2): , : , : ]
+        # print(frame.shape)
 
-        frame_main = cv2.vconcat([frame_left,frame_right])
-        frame_record = cv2.vconcat([frame_left,frame_right])
-
-        frame_mog2 = frame_main.copy()
-        frame_yolo_main = frame_main.copy()
+        frame_mog2 = frame.copy()
+        frame_yolo_main = frame.copy()
 
         img, img_ori = img_preprocessing(frame_yolo_main, imgsz, stride, pt)
+        try:
+            person_tracking_img, person_box_left_list, person_box_right_list = person_tracking(model, img, img_ori, device)
 
-        person_tracking_img, person_box_left_list, person_box_right_list = person_tracking(model, img, img_ori, device)
+        except:
+            continue
 
-        ball_detect_img, ball_cand_box_list_left, ball_cand_box_list_right = ball_tracking(frame_mog2, args.debug)  #get ball cand bbox list
 
-        if ball_cand_box_list_left:
-            ball_box_left = check_iou(person_box_left_list, ball_cand_box_list_left) # get left camera ball bbox list
-
-        if ball_cand_box_list_right:
-            ball_box_right = check_iou(person_box_right_list, ball_cand_box_list_right) # get right camera ball bbox list
-
-        ball_box = [ball_box_left, ball_box_right]
-
-        if ball_box:  #draw ball bbox 
-            
-            total_ball_box = ball_box[0] + ball_box[1]
-
-            for i in range(len(total_ball_box)):
-                x0, y0, x1, y1 = total_ball_box[i]
-
-                ball_x_pos, ball_y_pos = int((x0 + x1)/2), int((y0 +y1)/2)
-
-                cv2.rectangle(frame_main, (x0, y0), (x1, y1), color, 3)
-
-                if args.record == True :
-                    cv2.rectangle(frame_record, (x0, y0), (x1, y1), color, 3)
-
-        ball_cen_left = trans_point(frame_main, ball_box_left)
-        ball_cen_right = trans_point(frame_main, ball_box_right)
-
-        if args.debug:
-            print("ball_cen_left = ",ball_cen_left)
-            print("ball_cen_right = ",ball_cen_right)
-
-        print("KF_flag : ",estimation_ball.kf_flag)
-
-        if len(ball_cen_left) and len(ball_cen_right): #2개의 카메라에서 ball이 검출 되었는가?
-            fly_check = estimation_ball.check_ball_flying(ball_cen_left, ball_cen_right)
-            if (fly_check) == 1:
-
-                ball_cand_pos = estimation_ball.get_ball_pos()
-
-                print("check_ball_fly")
-
-                if estimation_ball.kf_flag:
-
-                    print("ball_detect_next")
-
-                    pred_ball_pos = estimation_ball.kf.get_predict()
-                    ball_pos = get_prior_ball_pos(ball_cand_pos, pred_ball_pos)
-
-                    ball_pos = estimation_ball.ball_vel_check(ball_pos)
-
-                    ball_pos_jrajectory.append(ball_pos)
-
-                    estimation_ball.kf.update(ball_pos[0], ball_pos[1], ball_pos[2], dT)
-
-                    estimation_ball.ball_trajectory.append([ball_pos])
-
-                else:
-                    print("ball_detect_frist")
-
-                    if len(ball_cand_pos) > 1:
-                        pass
-                        #***************사람 위치와 공 위치 평가 함수******************
-                        #임시
-
-                        del_list = []
-
-                        for i in range(len(ball_cand_pos)) : #임시
-
-                            if abs(ball_cand_pos[i][1]) > 13.1 / 2 :
-
-                                del_list.append(i)
-
-                        ball_cand_pos = np.delete(np.array(ball_cand_pos),del_list,axis = 0).tolist()
-
-                        ball_pos = ball_cand_pos[(9 - abs(np.array(ball_cand_pos)[:,0])).argmin()]
-
-                        ball_pos_jrajectory.append(ball_pos)
-
-                        estimation_ball.kf = Kalman_filiter(ball_pos[0], ball_pos[1], ball_pos[2], dT)
-                        estimation_ball.kf_flag = True
-                        estimation_ball.ball_trajectory.append([ball_pos])
-
-                    else:
-                        ball_pos = ball_cand_pos[0]
-                        ball_pos_jrajectory.append(ball_pos)
-
-                        estimation_ball.kf = Kalman_filiter(ball_pos[0], ball_pos[1], ball_pos[2], dT)
-                        estimation_ball.kf_flag = True
-                        estimation_ball.ball_trajectory.append([ball_pos])
-
-            elif (fly_check) == 3:
-                print("setup_ball_fly")
-                #estimation_ball.reset_ball()
-
-            else : 
-                print("not_detect_fly_ball")
-
-                if estimation_ball.kf_flag == True:
-                    print("ball_predict_next_KF")
-                    
-                    estimation_ball.kf.predict(dT)
-
-                    ball_pos = estimation_ball.kf.get_predict()
-
-                    ball_pos = estimation_ball.ball_vel_check(ball_pos)
-
-                    ball_pos_jrajectory.append(ball_pos.tolist())
-
-
-                    estimation_ball.ball_trajectory.append([ball_pos])
-
-                    print("pred_ball_pos = ",ball_pos)
-
-
-
-                else : 
-                    print("reset_ALL")
-                    estimation_ball.reset_ball()
-                    ball_pos_jrajectory.clear()
-                    
-                    court_img_reset_count += 1
-                
-        else:
-            print("not ball_detect")
-
-            if estimation_ball.kf_flag: #칼만 필터 유뮤 확인
-                print("ball_predict_next_KF")
-
-                estimation_ball.kf.predict(dT)
-
-                ball_pos = estimation_ball.kf.get_predict()
-
-                ball_pos = estimation_ball.ball_vel_check(ball_pos)
-
-                ball_pos_jrajectory.append(ball_pos.tolist())
-
-                estimation_ball.ball_trajectory.append([ball_pos])
-
-                print("pred_ball_pos = ",ball_pos)
-
-                disappear_cnt += 1
-
-                if ball_pos[2] < 0 or disappear_cnt > 4 or  ball_pos[0] > 0 :
-    
-                    print("reset_ALL")
-
-                    estimation_ball.reset_ball()
-                    ball_pos_jrajectory.clear()
-                    disappear_cnt = 0
-
-                    court_img_reset_count += 1
-
-            else:
-                print("reset_ALL")
-                estimation_ball.reset_ball()
-                ball_pos_jrajectory.clear()
-
-                court_img_reset_count += 1
-                
-        if len(ball_pos) and (ball_pos[0] < - 2.5):
-            ball_landing_point = cal_landing_point(ball_pos_jrajectory)
-
-            draw_point_court(tennis_court_img, ball_pos, padding_x, padding_y)
-            draw_landing_point_court(tennis_court_img, ball_landing_point, padding_x, padding_y)
-
-            print("ball_pos = ",ball_pos)
-            print("ball_landing_point = ",ball_landing_point)
-
-        frame_record = cv2.hconcat([frame_main,tennis_court_img])
-
-        cv2.imshow('frame_record',frame_record)
 
         t2 = time.time()
 
         print("FPS : " , 1/(t2-t1))
 
-        if args.debug:
-            cv2.imshow('person_tracking_img',person_tracking_img)
-            cv2.imshow('ball_detect_img',ball_detect_img)
+        cv2.imshow('person_tracking_img',person_tracking_img)
 
-        if args.record:
-            out.write(frame_record)
+
+        # if args.record:
+        #     out.write(frame_record)
 
         key = cv2.waitKey(1)
 

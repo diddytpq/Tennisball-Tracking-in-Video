@@ -8,7 +8,8 @@ FILE = Path(__file__).absolute()
 sys.path.append(FILE.parents[0].as_posix())  # add code to path
 
 path = str(FILE.parents[0])
-sys.path.insert(0, './yolov5')
+sys.path.append(path + '/lib')  # add code to path
+
 
 import numpy as np
 import time
@@ -42,7 +43,7 @@ parser.add_argument('--debug', type = bool, default=False, help = 'set debug mod
 args = parser.parse_args()
 
 device = 0
-weights = path + "/yolov5/weights/yolov5m6.pt"
+weights = path + "/lib/yolov5/weights/yolov5m6.pt"
 imgsz = 640
 conf_thres = 0.25
 iou_thres = 0.45
@@ -83,6 +84,7 @@ def person_tracking(model, img, img_ori, device):
         if img_in.ndimension() == 3:
             img_in = img_in.unsqueeze(0)
         
+        print(img_in.size())
 
         pred = model(img_in, augment=False, visualize=False)
 
@@ -184,6 +186,8 @@ def main(input_video):
 
         frame = cv2.resize(frame, dsize=(720, 405 * 2), interpolation=cv2.INTER_LINEAR)
 
+        # print(frame.shape)
+
         frame_left = frame[0 : int(frame.shape[0]/2), : , : ]
         frame_right = frame[int(frame.shape[0]/2): , : , : ]
 
@@ -194,9 +198,11 @@ def main(input_video):
         frame_yolo_main = frame_main.copy()
 
         img, img_ori = img_preprocessing(frame_yolo_main, imgsz, stride, pt)
+        try:
+            person_tracking_img, person_box_left_list, person_box_right_list = person_tracking(model, img, img_ori, device)
 
-        person_tracking_img, person_box_left_list, person_box_right_list = person_tracking(model, img, img_ori, device)
-
+        except:
+            continue
         ball_detect_img, ball_cand_box_list_left, ball_cand_box_list_right = ball_tracking(frame_mog2, args.debug)  #get ball cand bbox list
 
         if ball_cand_box_list_left:

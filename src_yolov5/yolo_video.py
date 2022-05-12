@@ -8,7 +8,8 @@ FILE = Path(__file__).absolute()
 sys.path.append(FILE.parents[0].as_posix())  # add code to path
 
 path = str(FILE.parents[0])
-sys.path.insert(0, './yolov5')
+sys.path.append(path + '/lib')  # add code to path
+
 
 import numpy as np
 import time
@@ -18,7 +19,6 @@ import torch
 import torch.backends.cudnn as cudnn
 
 from tools import *
-#from tools_backup import *
 
 from yolov5.models.common import DetectMultiBackend
 from yolov5.utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
@@ -31,12 +31,23 @@ from yolov5.utils.augmentations import letterbox
 
 from kalman_utils.KFilter import *
 
+import argparse
+
+parser = argparse.ArgumentParser(description = 'predict_tennis_ball_landing_point')
+
+parser.add_argument('--video_path', type = str, default='videos/2.mov', help = 'input your video path')
+parser.add_argument('--record', type = bool, default=False, help = 'set record video')
+parser.add_argument('--debug', type = bool, default=False, help = 'set debug mod')
+
+
+args = parser.parse_args()
+
 device = 0
-weights = path + "/yolov5/weights/yolov5m6.pt"
+weights = path + "/lib/yolov5/weights/yolov5m6.pt"
 imgsz = 640
 conf_thres = 0.25
 iou_thres = 0.45
-classes = None
+classes = None #[0, 38]
 agnostic_nms = False
 max_det = 1000
 half=False
@@ -59,16 +70,12 @@ cudnn.benchmark = True  # set True to speed up constant image size inference
 color = tuple(np.random.randint(low=200, high = 255, size = 3).tolist())
 color = tuple([0,125,255])
 
-recode = False
-start_frame = 2000
-video_path = "videos/tennis_FOV.MP4"
-
-# 2번 frame 1250
-
-
+start_frame = 0
 
 def person_tracking(model, img, img_ori, device):
 
+        person_box_left = []
+        person_box_right = []
 
         img_in = torch.from_numpy(img).to(device)
         img_in = img_in.float()
@@ -77,7 +84,6 @@ def person_tracking(model, img, img_ori, device):
         if img_in.ndimension() == 3:
             img_in = img_in.unsqueeze(0)
         
-
         pred = model(img_in, augment=False, visualize=False)
 
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
@@ -100,28 +106,43 @@ def person_tracking(model, img, img_ori, device):
 
                     x0, y0, x1, y1 = int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3])
 
-                    x0, y0, x1, y1 = x0 - 10, y0 - 10, x1 + 10, y1
+                    x0, y0, x1, y1 = x0 - 10, y0 - 10, x1 + 10, y1 + 10
 
                     plot_one_box([x0, y0, x1, y1], im0, label=label, color=colors(c, True), line_thickness=3)
+
+                    if y0 < (img_ori.shape[0] / 2) :
+                        person_box_left.append([x0, y0, x1, y1])
+
+                    else : 
+                        person_box_right.append([x0, y0, x1, y1])
             
-        return im0
+        return im0, person_box_left, person_box_right
 
 
 def main(input_video):
 
+
     ball_esti_pos = []
     dT = 1 / 25
-    
+
     cap_main = cv2.VideoCapture(input_video)
 
     fps = int(cap_main.get(cv2.CAP_PROP_FPS))
-    point_image = np.zeros([408 * 2,720,3], np.uint8) + 255
 
-    if recode:
-        codec = cv2.VideoWriter_fourcc(*'XVID')
-        out = cv2.VideoWriter("ball_landing_point.mp4", codec, fps, (2144,810))
+    if args.record:
+        codec = cv2.VideoWriter_fourcc(*'X264')
+        out = cv2.VideoWriter("yolo_test_video.mp4", codec, fps, (1280,720))
+
+    estimation_ball = Ball_Pos_Estimation()
+    
+    #칼만필터 초기 생성 후 삭제 --> 초기 생성한 칼만필터는 동작하지 않는 버그가 있음
+    estimation_ball.kf = Kalman_filiter(0, 0, 0, dT)
+    estimation_ball.kf.predict(dT)
+    estimation_ball.reset_ball()
+
 
     disappear_cnt = 0
+    court_img_reset_count = 0
     ball_pos_jrajectory = []
 
     total_frmae = int(cap_main.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -132,34 +153,46 @@ def main(input_video):
 
     while cap_main.isOpened():
 
+        print("-----------------------------------------------------------------")
         t1 = time.time()
+
+        frame_count = int(cap_main.get(cv2.CAP_PROP_POS_FRAMES))
+
+        print("frame_count : ",frame_count)
 
         ret, frame = cap_main.read()
 
-        frame = cv2.resize(frame, dsize = [0,0], fx = 0.5, fy = 0.5, interpolation=cv2.INTER_LINEAR)
+        # frame = cv2.resize(frame, dsize=(640, 640), interpolation=cv2.INTER_LINEAR)
+
+        # print(frame.shape)
+
+        frame_mog2 = frame.copy()
+        frame_yolo_main = frame.copy()
+
+        img, img_ori = img_preprocessing(frame_yolo_main, imgsz, stride, pt)
+        try:
+            person_tracking_img, person_box_left_list, person_box_right_list = person_tracking(model, img, img_ori, device)
+
+        except:
+            continue
 
 
-        img, img_ori = img_preprocessing(frame, imgsz, stride, pt)
-
-        person_tracking_img = person_tracking(model, img.copy(), img_ori.copy(), device)
-
-        #self.frame_recode = self.main_frame
 
         t2 = time.time()
 
-        #main_frame = cv2.hconcat([self.camera_data, robot_detect_img, ball_image])
+        print("FPS : " , 1/(t2-t1))
 
-        cv2.imshow("person_tracking_img", person_tracking_img)
-        #cv2.imshow("camera_frame", self.camera_data)
-        #cv2.imshow("fgmask_dila", self.fgmask_dila)
+        cv2.imshow('person_tracking_img',person_tracking_img)
 
-        #cv2.imshow("ball_image", ball_image)
 
-        print("FPS : ",1 / (t2 - t1))
+        if args.record:
+            out.write(person_tracking_img)
 
-        #print((t2-t1))
         key = cv2.waitKey(1)
 
+        if key == ord("c") or  court_img_reset_count >50 : 
+            tennis_court_img = clear_tennis_court_img()
+            court_img_reset_count = 0
 
         if key == 27 : 
             cap_main.release()
@@ -168,4 +201,4 @@ def main(input_video):
 
 if __name__ == "__main__":
 
-    main(video_path)
+    main(args.video_path)
