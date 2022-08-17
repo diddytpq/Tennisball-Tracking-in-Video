@@ -21,7 +21,7 @@ import torch.backends.cudnn as cudnn
 from tools import *
 
 from yolov5.models.common import DetectMultiBackend
-from yolov5.utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
+from yolov5.utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
 from yolov5.utils.general import (LOGGER, check_file, check_img_size, check_imshow, check_requirements, colorstr,
                            increment_path, non_max_suppression, print_args, scale_coords, strip_optimizer, xyxy2xywh)
 from yolov5.utils.plots import Annotator, colors, save_one_box
@@ -170,11 +170,11 @@ def main(input_video):
         frame_yolo_main = frame.copy()
 
         img, img_ori = img_preprocessing(frame_yolo_main, imgsz, stride, pt)
-        try:
-            person_tracking_img, person_box_left_list, person_box_right_list = person_tracking(model, img, img_ori, device)
+        # try:
+        person_tracking_img, person_box_left_list, person_box_right_list = person_tracking(model, img, img_ori, device)
 
-        except:
-            continue
+        # except:
+        #     continue
 
 
 

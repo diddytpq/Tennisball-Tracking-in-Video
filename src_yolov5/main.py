@@ -21,7 +21,7 @@ import torch.backends.cudnn as cudnn
 from tools import *
 
 from yolov5.models.common import DetectMultiBackend
-from yolov5.utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
+from yolov5.utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
 from yolov5.utils.general import (LOGGER, check_file, check_img_size, check_imshow, check_requirements, colorstr,
                            increment_path, non_max_suppression, print_args, scale_coords, strip_optimizer, xyxy2xywh)
 from yolov5.utils.plots import Annotator, colors, save_one_box
@@ -39,6 +39,12 @@ parser.add_argument('--video_path', type = str, default='videos/tennis_video_2/1
 parser.add_argument('--record', type = bool, default=False, help = 'set record video')
 parser.add_argument('--debug', type = bool, default=False, help = 'set debug mod')
 
+FILE = Path(__file__).resolve()
+ROOT = FILE.parents[0]  # YOLOv5 root directory
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))  # add ROOT to PATH
+ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
+
 
 args = parser.parse_args()
 
@@ -52,9 +58,10 @@ agnostic_nms = False
 max_det = 1000
 half=False
 dnn = False
+data=ROOT / 'data/coco128.yaml'
 
 device = select_device(device)
-model = DetectMultiBackend(weights, device=device, dnn=dnn)
+model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data, fp16=half)
 stride, names, pt, jit, onnx = model.stride, model.names, model.pt, model.jit, model.onnx
 imgsz = check_img_size(imgsz, s=stride)  # check image size
 
@@ -203,7 +210,8 @@ def main(input_video):
 
         except:
             continue
-        ball_detect_img, ball_cand_box_list_left, ball_cand_box_list_right = ball_tracking(frame_mog2, args.debug)  #get ball cand bbox list
+
+        ball_detect_img, ball_cand_box_list_left, ball_cand_box_list_right, fgmask_erode_1 = ball_tracking(frame_mog2, args.debug)  #get ball cand bbox list
 
         if ball_cand_box_list_left:
             ball_box_left = check_iou(person_box_left_list, ball_cand_box_list_left) # get left camera ball bbox list

@@ -35,7 +35,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description = 'predict_tennis_ball_landing_point')
 
-parser.add_argument('--video_path', type = str, default='videos/tennis_video_2/1.mov', help = 'input your video path')
+parser.add_argument('--video_path', type = str, default='videos/2.mov', help = 'input your video path')
 parser.add_argument('--record', type = bool, default=False, help = 'set record video')
 parser.add_argument('--debug', type = bool, default=False, help = 'set debug mod')
 
@@ -47,7 +47,7 @@ weights = path + "/lib/yolov5/weights/yolov5m6.pt"
 imgsz = 640
 conf_thres = 0.25
 iou_thres = 0.45
-classes = [0, 38]
+classes = [32]#[0, 38]
 agnostic_nms = False
 max_det = 1000
 half=False
@@ -145,7 +145,7 @@ def main(input_video):
 
     if args.record:
         codec = cv2.VideoWriter_fourcc(*'XVID')
-        out = cv2.VideoWriter("ball_landing_point.mp4", codec, fps, (2144,810))
+        out = cv2.VideoWriter("test.mp4", codec, fps, (1280,720))
 
     estimation_ball = Ball_Pos_Estimation()
     
@@ -176,7 +176,7 @@ def main(input_video):
 
         ret, frame = cap_main.read()
 
-        frame = cv2.resize(frame, dsize=(640, 640), interpolation=cv2.INTER_LINEAR)
+        # frame = cv2.resize(frame, dsize=(640, 640), interpolation=cv2.INTER_LINEAR)
 
         # print(frame.shape)
 
@@ -198,9 +198,10 @@ def main(input_video):
 
         cv2.imshow('person_tracking_img',person_tracking_img)
 
+        frame_record = person_tracking_img
 
-        # if args.record:
-        #     out.write(frame_record)
+        if args.record:
+            out.write(frame_record)
 
         key = cv2.waitKey(1)
 

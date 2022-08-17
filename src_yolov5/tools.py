@@ -15,9 +15,9 @@ import numpy as np
 import time
 import cv2
 
-from yolov5.utils.augmentations import letterbox
+from lib.yolov5.utils.augmentations import letterbox
 
-from kalman_utils.KFilter import *
+from lib.kalman_utils.KFilter import *
 
 
 # ball_tracking setup
@@ -353,7 +353,7 @@ def ball_tracking(image, debug = 0):
         #cv2.imshow("fgmask_erode",fgmask_erode)
         #cv2.imshow("fgmask_dila",fgmask_dila)
 
-        return image_ori, ball_cand_box_left, ball_cand_box_right
+        return image_ori, ball_cand_box_left, ball_cand_box_right, fgmask_erode_1
 
 def check_iou(person_box, ball_cand_box):
         no_ball_box = []
